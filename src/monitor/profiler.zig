@@ -11,38 +11,47 @@ pub const ProfileResult = struct {
         if (self.calls == 0) return 0;
         return self.total_ns / self.calls;
     }
+
+    pub fn record(self: *ProfileResult, duration_ns: u64) void {
+        self.calls += 1;
+        self.total_ns += duration_ns;
+        if (duration_ns < self.min_ns) self.min_ns = duration_ns;
+        if (duration_ns > self.max_ns) self.max_ns = duration_ns;
+    }
 };
 
 pub const Profiler = struct {
-    name: []const u8,
-    start_time: i64,
-    result: *ProfileResult,
+    encrypt_stats: ProfileResult,
+    decrypt_stats: ProfileResult,
+    send_stats: ProfileResult,
 
-    pub fn init(name: []const u8, result: *ProfileResult) Profiler {
+    pub fn init() Profiler {
         return Profiler{
-            .name = name,
-            .start_time = std.time.nanoTimestamp(),
-            .result = result,
+            .encrypt_stats = .{ .name = "Encrypt" },
+            .decrypt_stats = .{ .name = "Decrypt" },
+            .send_stats = .{ .name = "Net Send" },
         };
     }
 
-    pub fn end(self: Profiler) void {
-        const end_time = std.time.nanoTimestamp();
-        const duration: u64 = @intCast(end_time - self.start_time);
+    pub fn printStats(self: *Profiler) void {
+        std.debug.print("\n--- PROFILER ---\n", .{});
+        printOne(&self.encrypt_stats);
+        printOne(&self.decrypt_stats);
+        printOne(&self.send_stats);
+        std.debug.print("----------------\n", .{});
+        std.debug.print("You: ", .{});
+    }
 
-        self.result.calls += 1;
-        self.result.total_ns += duration;
-        if (duration < self.result.min_ns) self.result.min_ns = duration;
-        if (duration > self.result.max_ns) self.result.max_ns = duration;
+    fn printOne(r: *ProfileResult) void {
+        if (r.calls == 0) {
+            std.debug.print("  {s}: no data\n", .{r.name});
+            return;
+        }
+        const avg_us = r.average() / 1000;
+        const min_us = r.min_ns / 1000;
+        const max_us = r.max_ns / 1000;
+        std.debug.print("  {s}: {} calls | avg {} us | min {} us | max {} us\n", .{
+            r.name, r.calls, avg_us, min_us, max_us,
+        });
     }
 };
-
-pub fn printResult(result: ProfileResult) void {
-    std.debug.print("{s}: {} calls, avg {d} ns, min {d} ns, max {d} ns\n", .{
-        result.name,
-        result.calls,
-        result.average(),
-        result.min_ns,
-        result.max_ns,
-    });
-}

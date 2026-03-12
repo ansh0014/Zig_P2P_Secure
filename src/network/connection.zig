@@ -12,24 +12,25 @@ pub const Connection = struct {
         };
     }
 
+    fn readExact(self: *Connection, buf: []u8) !void {
+        var total: usize = 0;
+        while (total < buf.len) {
+            const n = try self.stream.read(buf[total..]);
+            if (n == 0) return error.ConnectionClosed;
+            total += n;
+        }
+    }
+
     pub fn send(self: *Connection, message: []const u8) !void {
         const len: u32 = @intCast(message.len);
         const len_buf = std.mem.toBytes(len);
-
         try self.stream.writeAll(&len_buf);
         try self.stream.writeAll(message);
     }
 
     pub fn receive(self: *Connection) ![]u8 {
         var len_buf: [4]u8 = undefined;
-
-        const bytes_read_len = try self.stream.read(&len_buf);
-        if (bytes_read_len == 0) {
-            return error.ConnectionClosed;
-        }
-        if (bytes_read_len < 4) {
-            return error.IncompleteLength;
-        }
+        try self.readExact(&len_buf);
 
         const msg_len = std.mem.readInt(u32, &len_buf, .little);
 
@@ -43,14 +44,7 @@ pub const Connection = struct {
         const message = try self.allocator.alloc(u8, msg_len);
         errdefer self.allocator.free(message);
 
-        var total_read: usize = 0;
-        while (total_read < msg_len) {
-            const bytes_read = try self.stream.read(message[total_read..]);
-            if (bytes_read == 0) {
-                return error.ConnectionClosed;
-            }
-            total_read += bytes_read;
-        }
+        try self.readExact(message);
 
         return message;
     }

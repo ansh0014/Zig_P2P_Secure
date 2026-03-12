@@ -6,6 +6,8 @@ const sender = @import("../network/sender.zig");
 const receiver = @import("../network/receiver.zig");
 const writer = @import("../network/writer.zig");
 const MessageQueue = @import("../threading/message_queue.zig").MessageQueue;
+const CpuMonitor = @import("../monitor/cpu.zig").CpuMonitor;
+const Profiler = @import("../monitor/profiler.zig").Profiler;
 
 pub fn run(allocator: std.mem.Allocator) !void {
     const address = try std.net.Address.parseIp(constants.HOST, constants.PORT);
@@ -21,14 +23,14 @@ pub fn run(allocator: std.mem.Allocator) !void {
     handshake.printUniqueId(&unique_id);
     std.debug.print("Waiting for client connection...\n", .{});
 
-    const client_conn = try listener.accept();
+    const client_conn1 = try listener.accept();
     std.debug.print("Client connected\n", .{});
 
-    var conn = try allocator.create(Connection);
-    conn.* = Connection.init(client_conn.stream, allocator);
+    var recv_conn = try allocator.create(Connection);
+    recv_conn.* = Connection.init(client_conn1.stream, allocator);
     defer {
-        conn.close();
-        allocator.destroy(conn);
+        recv_conn.close();
+        allocator.destroy(recv_conn);
     }
 
     std.debug.print("Performing handshake...\n", .{});
@@ -37,7 +39,7 @@ pub fn run(allocator: std.mem.Allocator) !void {
     var total_read: usize = 0;
 
     while (total_read < constants.UNIQUE_ID_LEN) {
-        const n = try conn.stream.read(received_id[total_read..]);
+        const n = try recv_conn.stream.read(received_id[total_read..]);
         if (n == 0) return error.ConnectionClosed;
         total_read += n;
     }
@@ -46,16 +48,30 @@ pub fn run(allocator: std.mem.Allocator) !void {
         return error.InvalidIdLength;
     }
 
-    std.debug.print("Handshake successful! Session established.\n\n", .{});
+    std.debug.print("Handshake successful!\n", .{});
+
+    const client_conn2 = try listener.accept();
+
+    var send_conn = try allocator.create(Connection);
+    send_conn.* = Connection.init(client_conn2.stream, allocator);
+    defer {
+        send_conn.close();
+        allocator.destroy(send_conn);
+    }
+
+    std.debug.print("Session ready. Type /help for commands.\n\n", .{});
 
     const key = constants.DEFAULT_KEY[0..32];
     var output_mutex = std.Thread.Mutex{};
     var msg_queue = MessageQueue.init(allocator);
     defer msg_queue.deinit();
 
-    const sender_thread = try std.Thread.spawn(.{}, sender.senderThread, .{ &msg_queue, allocator, &output_mutex });
-    const writer_thread = try std.Thread.spawn(.{}, writer.writerThread, .{ conn, &msg_queue, key });
-    const receiver_thread = try std.Thread.spawn(.{}, receiver.receiverThread, .{ conn, key, &output_mutex });
+    var monitor = CpuMonitor.init();
+    var profiler = Profiler.init();
+
+    const sender_thread = try std.Thread.spawn(.{}, sender.senderThread, .{ &msg_queue, allocator, &output_mutex, &monitor, &profiler });
+    const writer_thread = try std.Thread.spawn(.{}, writer.writerThread, .{ send_conn, &msg_queue, key, &monitor, &profiler });
+    const receiver_thread = try std.Thread.spawn(.{}, receiver.receiverThread, .{ recv_conn, key, &output_mutex, &monitor, &profiler });
 
     sender_thread.join();
     writer_thread.join();

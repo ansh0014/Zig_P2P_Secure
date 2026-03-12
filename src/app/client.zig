@@ -6,6 +6,8 @@ const sender = @import("../network/sender.zig");
 const receiver = @import("../network/receiver.zig");
 const writer = @import("../network/writer.zig");
 const MessageQueue = @import("../threading/message_queue.zig").MessageQueue;
+const CpuMonitor = @import("../monitor/cpu.zig").CpuMonitor;
+const Profiler = @import("../monitor/profiler.zig").Profiler;
 
 pub fn run(allocator: std.mem.Allocator) !void {
     std.debug.print("Client mode\n", .{});
@@ -15,30 +17,42 @@ pub fn run(allocator: std.mem.Allocator) !void {
     std.debug.print("Connecting to {s}:{}...\n", .{ constants.HOST, constants.PORT });
 
     const address = try std.net.Address.parseIp(constants.HOST, constants.PORT);
-    const stream = try std.net.tcpConnectToAddress(address);
 
-    var conn = try allocator.create(Connection);
-    conn.* = Connection.init(stream, allocator);
+    const stream1 = try std.net.tcpConnectToAddress(address);
+
+    var send_conn = try allocator.create(Connection);
+    send_conn.* = Connection.init(stream1, allocator);
     defer {
-        conn.close();
-        allocator.destroy(conn);
+        send_conn.close();
+        allocator.destroy(send_conn);
     }
 
-    std.debug.print("Connected to server!\n", .{});
-    std.debug.print("Sending handshake...\n", .{});
+    std.debug.print("Connected!\n", .{});
 
-    _ = try conn.stream.writeAll(&unique_id);
+    _ = try send_conn.stream.writeAll(&unique_id);
 
-    std.debug.print("Handshake sent. Session established.\n\n", .{});
+    const stream2 = try std.net.tcpConnectToAddress(address);
+
+    var recv_conn = try allocator.create(Connection);
+    recv_conn.* = Connection.init(stream2, allocator);
+    defer {
+        recv_conn.close();
+        allocator.destroy(recv_conn);
+    }
+
+    std.debug.print("Session ready. Type /help for commands.\n\n", .{});
 
     const key = constants.DEFAULT_KEY[0..32];
     var output_mutex = std.Thread.Mutex{};
     var msg_queue = MessageQueue.init(allocator);
     defer msg_queue.deinit();
 
-    const sender_thread = try std.Thread.spawn(.{}, sender.senderThread, .{ &msg_queue, allocator, &output_mutex });
-    const writer_thread = try std.Thread.spawn(.{}, writer.writerThread, .{ conn, &msg_queue, key });
-    const receiver_thread = try std.Thread.spawn(.{}, receiver.receiverThread, .{ conn, key, &output_mutex });
+    var monitor = CpuMonitor.init();
+    var profiler = Profiler.init();
+
+    const sender_thread = try std.Thread.spawn(.{}, sender.senderThread, .{ &msg_queue, allocator, &output_mutex, &monitor, &profiler });
+    const writer_thread = try std.Thread.spawn(.{}, writer.writerThread, .{ send_conn, &msg_queue, key, &monitor, &profiler });
+    const receiver_thread = try std.Thread.spawn(.{}, receiver.receiverThread, .{ recv_conn, key, &output_mutex, &monitor, &profiler });
 
     sender_thread.join();
     writer_thread.join();

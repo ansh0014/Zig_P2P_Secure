@@ -1,39 +1,29 @@
 const std = @import("std");
 const Connection = @import("connection.zig").Connection;
 const ChaCha20 = @import("../crypto/ChaCha20.zig");
+const CpuMonitor = @import("../monitor/cpu.zig").CpuMonitor;
+const Profiler = @import("../monitor/profiler.zig").Profiler;
 
-pub fn receiverThread(conn: *Connection, key: []const u8, output_mutex: *std.Thread.Mutex) void {
-    const thread_id = std.Thread.getCurrentId();
-
-    output_mutex.lock();
-    std.debug.print("[Receiver Thread ID: {}] Started\n", .{thread_id});
-    output_mutex.unlock();
-
+pub fn receiverThread(conn: *Connection, key: []const u8, output_mutex: *std.Thread.Mutex, monitor: *CpuMonitor, profiler: *Profiler) void {
     while (true) {
-        std.time.sleep(50 * std.time.ns_per_ms);
-
         const encrypted = conn.receive() catch |err| {
-            if (err == error.ConnectionClosed or err == error.IncompleteLength) {
-                output_mutex.lock();
-                std.debug.print("[Receiver] Connection closed or incomplete data\n", .{});
-                output_mutex.unlock();
-                break;
-            }
+            if (err == error.ConnectionClosed) break;
             continue;
         };
         defer conn.allocator.free(encrypted);
 
-        const decrypted = ChaCha20.decryptWithNonce(encrypted, key, conn.allocator) catch |err| {
-            output_mutex.lock();
-            std.debug.print("[Receiver] Decryption error: {}\n", .{err});
-            output_mutex.unlock();
+        const dec_start = std.time.nanoTimestamp();
+        const decrypted = ChaCha20.decryptWithNonce(encrypted, key, conn.allocator) catch {
             continue;
         };
         defer conn.allocator.free(decrypted);
+        const dec_end = std.time.nanoTimestamp();
+        profiler.decrypt_stats.record(@intCast(dec_end - dec_start));
+
+        monitor.recordReceived(encrypted.len);
 
         output_mutex.lock();
-        std.debug.print("\nPeer: {s}\n", .{decrypted});
-        std.debug.print("You: ", .{});
-        output_mutex.unlock();
+        defer output_mutex.unlock();
+        std.debug.print("\nPeer: {s}\nYou: ", .{decrypted});
     }
 }

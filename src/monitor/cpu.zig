@@ -1,85 +1,50 @@
 const std = @import("std");
-const builtin = @import("builtin");
-
-pub fn getCPUUsage() !f32 {
-    if (builtin.os.tag == .linux) {
-        return getCPUUsageLinux();
-    } else if (builtin.os.tag == .windows) {
-        return getCPUUsageWindows();
-    }
-    return error.UnsupportedPlatform;
-}
-
-fn getCPUUsageLinux() !f32 {
-    const file = try std.fs.openFileAbsolute("/proc/stat", .{});
-    defer file.close();
-
-    var buffer: [256]u8 = undefined;
-    const bytes_read = try file.readAll(&buffer);
-    const content = buffer[0..bytes_read];
-
-    var lines = std.mem.splitSequence(u8, content, "\n");
-    const first_line = lines.next() orelse return error.InvalidFormat;
-
-    var fields = std.mem.splitSequence(u8, first_line, " ");
-    _ = fields.next();
-
-    var user: u64 = 0;
-    var nice: u64 = 0;
-    var system: u64 = 0;
-    var idle: u64 = 0;
-
-    if (fields.next()) |field| user = std.fmt.parseInt(u64, field, 10) catch 0;
-    if (fields.next()) |field| nice = std.fmt.parseInt(u64, field, 10) catch 0;
-    if (fields.next()) |field| system = std.fmt.parseInt(u64, field, 10) catch 0;
-    if (fields.next()) |field| idle = std.fmt.parseInt(u64, field, 10) catch 0;
-
-    const total_work = user + nice + system;
-    const total = total_work + idle;
-
-    if (total == 0) return 0;
-
-    return @as(f32, @floatFromInt(total_work)) / @as(f32, @floatFromInt(total)) * 100.0;
-}
-
-fn getCPUUsageWindows() !f32 {
-    return 0.0;
-}
-
-// CPU MONITORING
-// Tracks CPU usage and thread performance
 
 pub const CpuMonitor = struct {
     start_time: i64,
+    messages_sent: u64,
+    messages_received: u64,
+    bytes_encrypted: u64,
+    bytes_decrypted: u64,
 
     pub fn init() CpuMonitor {
         return CpuMonitor{
             .start_time = std.time.milliTimestamp(),
+            .messages_sent = 0,
+            .messages_received = 0,
+            .bytes_encrypted = 0,
+            .bytes_decrypted = 0,
         };
     }
 
-    // Get elapsed time in milliseconds
-    pub fn getElapsedMs(self: *CpuMonitor) i64 {
-        const now = std.time.milliTimestamp();
-        return now - self.start_time;
+    pub fn getUptimeSeconds(self: *CpuMonitor) f64 {
+        const elapsed = std.time.milliTimestamp() - self.start_time;
+        return @as(f64, @floatFromInt(elapsed)) / 1000.0;
     }
 
-    // Reset the timer
-    pub fn reset(self: *CpuMonitor) void {
-        self.start_time = std.time.milliTimestamp();
+    pub fn recordSent(self: *CpuMonitor, bytes: u64) void {
+        self.messages_sent += 1;
+        self.bytes_encrypted += bytes;
     }
 
-    // Print CPU stats
+    pub fn recordReceived(self: *CpuMonitor, bytes: u64) void {
+        self.messages_received += 1;
+        self.bytes_decrypted += bytes;
+    }
+
     pub fn printStats(self: *CpuMonitor) void {
-        const elapsed = self.getElapsedMs();
-        std.debug.print("CPU Monitor - Elapsed: {} ms\n", .{elapsed});
+        const uptime = self.getUptimeSeconds();
+        std.debug.print("\n--- SESSION STATS ---\n", .{});
+        std.debug.print("  Uptime:     {d:.1} sec\n", .{uptime});
+        std.debug.print("  Sent:       {} messages\n", .{self.messages_sent});
+        std.debug.print("  Received:   {} messages\n", .{self.messages_received});
+        std.debug.print("  Encrypted:  {} bytes\n", .{self.bytes_encrypted});
+        std.debug.print("  Decrypted:  {} bytes\n", .{self.bytes_decrypted});
+        if (uptime > 0) {
+            const msg_per_min = @as(f64, @floatFromInt(self.messages_sent + self.messages_received)) / uptime * 60.0;
+            std.debug.print("  Throughput: {d:.1} msg/min\n", .{msg_per_min});
+        }
+        std.debug.print("---------------------\n", .{});
+        std.debug.print("You: ", .{});
     }
 };
-
-// Measure execution time of a function
-pub fn measureTime(comptime func: anytype, args: anytype) !u64 {
-    const start = std.time.nanoTimestamp();
-    try func(args);
-    const end = std.time.nanoTimestamp();
-    return @intCast(end - start);
-}
