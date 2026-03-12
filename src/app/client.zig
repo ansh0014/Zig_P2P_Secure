@@ -14,9 +14,13 @@ pub fn run(allocator: std.mem.Allocator) !void {
 
     const unique_id = try handshake.readUniqueIdFromInput();
 
-    std.debug.print("Connecting to {s}:{}...\n", .{ constants.HOST, constants.PORT });
+    const host = std.process.getEnvVarOwned(allocator, "PEER_HOST") catch null;
+    defer if (host) |h| allocator.free(h);
+    const target_host = if (host) |h| h else constants.HOST;
 
-    const address = try std.net.Address.parseIp(constants.HOST, constants.PORT);
+    std.debug.print("Connecting to {s}:{}...\n", .{ target_host, constants.PORT });
+
+    const address = try std.net.Address.parseIp(target_host, constants.PORT);
 
     const stream1 = try std.net.tcpConnectToAddress(address);
 

@@ -10,7 +10,7 @@ const CpuMonitor = @import("../monitor/cpu.zig").CpuMonitor;
 const Profiler = @import("../monitor/profiler.zig").Profiler;
 
 pub fn run(allocator: std.mem.Allocator) !void {
-    const address = try std.net.Address.parseIp(constants.HOST, constants.PORT);
+    const address = try std.net.Address.parseIp("0.0.0.0", constants.PORT);
 
     var listener = try address.listen(.{
         .reuse_address = true,
@@ -19,7 +19,7 @@ pub fn run(allocator: std.mem.Allocator) !void {
 
     const unique_id = try handshake.generateUniqueId();
 
-    std.debug.print("Server started on {s}:{}\n", .{ constants.HOST, constants.PORT });
+    std.debug.print("Server started on 0.0.0.0:{}\n", .{constants.PORT});
     handshake.printUniqueId(&unique_id);
     std.debug.print("Waiting for client connection...\n", .{});
 
