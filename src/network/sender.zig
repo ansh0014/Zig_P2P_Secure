@@ -8,19 +8,23 @@ pub fn senderThread(queue: *MessageQueue, allocator: std.mem.Allocator, output_m
 
     var buffer: [1024]u8 = undefined;
 
-    output_mutex.lock();
-    try stdout.writeAll("[Sender Thread] Started\n");
-    output_mutex.unlock();
+    {
+        output_mutex.lock();
+        defer output_mutex.unlock();
+        stdout.writeAll("[Sender Thread] Started\n") catch {};
+    }
 
     while (true) {
-        output_mutex.lock();
-        try stdout.writeAll("You: ");
-        output_mutex.unlock();
+        {
+            output_mutex.lock();
+            defer output_mutex.unlock();
+            stdout.writeAll("You: ") catch {};
+        }
 
         const raw_line = (try stdin.readUntilDelimiterOrEof(&buffer, '\n')) orelse {
             break;
         };
-        const line = std.mem.trimRight(u8, raw_line, "\r");
+        const line = std.mem.trim(u8, raw_line, " \t\r");
 
         if (line.len == 0) {
             continue;
@@ -31,8 +35,8 @@ pub fn senderThread(queue: *MessageQueue, allocator: std.mem.Allocator, output_m
 
         queue.push(message) catch |err| {
             output_mutex.lock();
+            defer output_mutex.unlock();
             std.debug.print("[Sender] Queue error: {}\n", .{err});
-            output_mutex.unlock();
             allocator.free(message_data);
             continue;
         };
