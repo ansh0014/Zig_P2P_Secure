@@ -252,6 +252,8 @@ Automated test suite planned for cryptographic verification and thread-safety va
 
 ## System Design
 
+![alt text](image-1.png)
+
 ## License
 
 MIT License — See LICENSE file for details
