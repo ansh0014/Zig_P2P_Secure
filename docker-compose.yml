@@ -1,0 +1,29 @@
+services:
+  server:
+    build: .
+    command: ["server"]
+    ports:
+      - "8080:8080"
+    networks:
+      p2p:
+        ipv4_address: 172.20.0.10
+    stdin_open: true
+    tty: true
+
+  client:
+    build: .
+    command: ["client"]
+    environment:
+      - PEER_HOST=172.20.0.10
+    networks:
+      p2p:
+        ipv4_address: 172.20.0.11
+    stdin_open: true
+    tty: true
+
+networks:
+  p2p:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/24
