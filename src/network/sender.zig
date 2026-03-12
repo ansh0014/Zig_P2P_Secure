@@ -17,21 +17,24 @@ pub fn senderThread(queue: *MessageQueue, allocator: std.mem.Allocator, output_m
         try stdout.writeAll("You: ");
         output_mutex.unlock();
 
-        if (stdin.readUntilDelimiterOrEof(&buffer, '\n')) |line| {
-            if (line.len == 0) continue;
-
-            const message_data = try allocator.dupe(u8, line);
-            const message = Message.init(message_data);
-
-            queue.push(message) catch |err| {
-                output_mutex.lock();
-                std.debug.print("[Sender] Queue error: {}\n", .{err});
-                output_mutex.unlock();
-                allocator.free(message_data);
-                continue;
-            };
-        } else |_| {
+        const raw_line = (try stdin.readUntilDelimiterOrEof(&buffer, '\n')) orelse {
             break;
+        };
+        const line = std.mem.trimRight(u8, raw_line, "\r");
+
+        if (line.len == 0) {
+            continue;
         }
+
+        const message_data = try allocator.dupe(u8, line);
+        const message = Message.init(message_data);
+
+        queue.push(message) catch |err| {
+            output_mutex.lock();
+            std.debug.print("[Sender] Queue error: {}\n", .{err});
+            output_mutex.unlock();
+            allocator.free(message_data);
+            continue;
+        };
     }
 }

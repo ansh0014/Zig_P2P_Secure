@@ -10,7 +10,7 @@ const MessageQueue = @import("../threading/message_queue.zig").MessageQueue;
 pub fn run(allocator: std.mem.Allocator) !void {
     std.debug.print("Client mode\n", .{});
 
-    const unique_id = try handshake.readUniqueIdFromInput(allocator);
+    const unique_id = try handshake.readUniqueIdFromInput();
 
     std.debug.print("Connecting to {s}:{}...\n", .{ constants.HOST, constants.PORT });
 
@@ -31,7 +31,7 @@ pub fn run(allocator: std.mem.Allocator) !void {
 
     std.debug.print("Handshake sent. Session established.\n\n", .{});
 
-    const key = constants.DEFAULT_KEY;
+    const key = constants.DEFAULT_KEY[0..32];
     var output_mutex = std.Thread.Mutex{};
     var msg_queue = MessageQueue.init(allocator);
     defer msg_queue.deinit();

@@ -15,34 +15,34 @@ pub fn printUniqueId(id: *const [constants.UNIQUE_ID_LEN]u8) void {
     std.debug.print("\n", .{});
 }
 
-pub fn readUniqueIdFromInput(allocator: std.mem.Allocator) ![constants.UNIQUE_ID_LEN]u8 {
+pub fn readUniqueIdFromInput() ![constants.UNIQUE_ID_LEN]u8 {
     const stdin = std.io.getStdIn().reader();
     var buffer: [128]u8 = undefined;
 
     std.debug.print("Enter Unique ID (32 hex characters): ", .{});
 
-    if (stdin.readUntilDelimiterOrEof(&buffer, '\n')) |line| {
-        if (line.len != constants.UNIQUE_ID_LEN * 2) {
-            return error.InvalidIdLength;
-        }
-
-        var id: [constants.UNIQUE_ID_LEN]u8 = undefined;
-
-        var i: usize = 0;
-        while (i < constants.UNIQUE_ID_LEN) : (i += 1) {
-            const hex_str = line[i * 2 .. i * 2 + 2];
-            id[i] = std.fmt.parseInt(u8, hex_str, 16) catch return error.InvalidHexFormat;
-        }
-
-        return id;
-    } else |_| {
+    const raw = (try stdin.readUntilDelimiterOrEof(&buffer, '\n')) orelse {
         return error.InputError;
+    };
+    const bytes_read = std.mem.trim(u8, raw, " \t\r");
+
+    if (bytes_read.len != constants.UNIQUE_ID_LEN * 2) {
+        return error.InvalidIdLength;
     }
+
+    var id: [constants.UNIQUE_ID_LEN]u8 = undefined;
+
+    var i: usize = 0;
+    while (i < constants.UNIQUE_ID_LEN) : (i += 1) {
+        const hex_pair = bytes_read[i * 2 .. i * 2 + 2];
+        id[i] = std.fmt.parseInt(u8, hex_pair, 16) catch {
+            return error.InvalidHexFormat;
+        };
+    }
+
+    return id;
 }
 
 pub fn verifyUniqueId(received: *const [constants.UNIQUE_ID_LEN]u8, expected: *const [constants.UNIQUE_ID_LEN]u8) bool {
-    for (received, expected) |r, e| {
-        if (r != e) return false;
-    }
-    return true;
+    return std.mem.eql(u8, received, expected);
 }

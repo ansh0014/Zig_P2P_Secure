@@ -1,21 +1,18 @@
 const std = @import("std");
 const constants = @import("constants.zig");
 
-
 pub const Config = struct {
     host: []const u8,
     port: u16,
-    encryption_mode: EncryptionMode,
-    enable_monitoring: bool,
-    log_level: LogLevel,
+    max_message_len: usize,
+    timeout_ms: u32,
 
     pub fn default() Config {
         return Config{
             .host = constants.HOST,
             .port = constants.PORT,
-            .encryption_mode = .xor,
-            .enable_monitoring = true,
-            .log_level = .info,
+            .max_message_len = 65536,
+            .timeout_ms = 100,
         };
     }
 };

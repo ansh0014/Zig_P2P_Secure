@@ -12,7 +12,7 @@ pub const MAX_MESSAGE_LEN: usize = 65536;
 pub const BUFFER_SIZE: usize = 8192;
 
 /// XOR encryption key (in real app, derive from unique ID)
-pub const DEFAULT_KEY = "thirtytwocharacterkeyfor_chacha";
+pub const DEFAULT_KEY = "thirtytwocharacterkeyfor_chacha!!";
 
 /// Timeout for queue operations
 pub const QUEUE_TIMEOUT_MS: u32 = 100;

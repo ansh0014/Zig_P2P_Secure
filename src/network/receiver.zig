@@ -13,10 +13,11 @@ pub fn receiverThread(conn: *Connection, key: []const u8, output_mutex: *std.Thr
         std.time.sleep(50 * std.time.ns_per_ms);
 
         const encrypted = conn.receive() catch |err| {
-            if (err != error.ConnectionClosed) {
+            if (err == error.ConnectionClosed or err == error.IncompleteLength) {
                 output_mutex.lock();
-                std.debug.print("[Receiver] Error: {}\n", .{err});
+                std.debug.print("[Receiver] Connection closed or incomplete data\n", .{});
                 output_mutex.unlock();
+                break;
             }
             continue;
         };

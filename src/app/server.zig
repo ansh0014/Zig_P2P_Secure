@@ -48,7 +48,7 @@ pub fn run(allocator: std.mem.Allocator) !void {
 
     std.debug.print("Handshake successful! Session established.\n\n", .{});
 
-    const key = constants.DEFAULT_KEY;
+    const key = constants.DEFAULT_KEY[0..32];
     var output_mutex = std.Thread.Mutex{};
     var msg_queue = MessageQueue.init(allocator);
     defer msg_queue.deinit();
