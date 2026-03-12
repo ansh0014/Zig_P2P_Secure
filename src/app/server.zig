@@ -16,6 +16,7 @@ pub fn run(allocator: std.mem.Allocator) !void {
     defer listener.deinit();
 
     const unique_id = try handshake.generateUniqueId();
+
     std.debug.print("Server started on {s}:{}\n", .{ constants.HOST, constants.PORT });
     handshake.printUniqueId(&unique_id);
     std.debug.print("Waiting for client connection...\n", .{});
@@ -25,17 +26,24 @@ pub fn run(allocator: std.mem.Allocator) !void {
 
     var conn = try allocator.create(Connection);
     conn.* = Connection.init(client_conn.stream, allocator);
-    try conn.setNonBlocking();
+    defer {
+        conn.close();
+        allocator.destroy(conn);
+    }
 
     std.debug.print("Performing handshake...\n", .{});
 
-    // Simple handshake - just read 32 bytes
-    var received_id: [32]u8 = undefined;
-    const bytes_read = try conn.stream.read(&received_id);
-    std.debug.print("Read {} bytes from client\n", .{bytes_read});
+    var received_id: [constants.UNIQUE_ID_LEN]u8 = undefined;
+    var total_read: usize = 0;
 
-    if (bytes_read != 32) {
-        std.debug.print("ERROR: Expected 32 bytes, got {}\n", .{bytes_read});
+    while (total_read < constants.UNIQUE_ID_LEN) {
+        const n = try conn.stream.read(received_id[total_read..]);
+        if (n == 0) return error.ConnectionClosed;
+        total_read += n;
+    }
+
+    if (total_read != constants.UNIQUE_ID_LEN) {
+        return error.InvalidIdLength;
     }
 
     std.debug.print("Handshake successful! Session established.\n\n", .{});
@@ -48,11 +56,6 @@ pub fn run(allocator: std.mem.Allocator) !void {
     const sender_thread = try std.Thread.spawn(.{}, sender.senderThread, .{ &msg_queue, allocator, &output_mutex });
     const writer_thread = try std.Thread.spawn(.{}, writer.writerThread, .{ conn, &msg_queue, key });
     const receiver_thread = try std.Thread.spawn(.{}, receiver.receiverThread, .{ conn, key, &output_mutex });
-
-    defer {
-        conn.close();
-        allocator.destroy(conn);
-    }
 
     sender_thread.join();
     writer_thread.join();

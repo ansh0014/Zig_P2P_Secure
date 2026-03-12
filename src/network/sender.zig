@@ -1,38 +1,36 @@
 const std = @import("std");
 const MessageQueue = @import("../threading/message_queue.zig").MessageQueue;
 const Message = @import("../threading/message_queue.zig").Message;
-const constants = @import("../utils/constants.zig");
 
 pub fn senderThread(queue: *MessageQueue, allocator: std.mem.Allocator, output_mutex: *std.Thread.Mutex) !void {
-    std.debug.print("[Sender Thread] Started\n", .{});
-
     const stdin = std.io.getStdIn().reader();
-    var buffer: [constants.MAX_MESSAGE_LEN]u8 = undefined;
+    const stdout = std.io.getStdOut().writer();
+
+    var buffer: [1024]u8 = undefined;
+
+    output_mutex.lock();
+    try stdout.writeAll("[Sender Thread] Started\n");
+    output_mutex.unlock();
 
     while (true) {
         output_mutex.lock();
-        std.debug.print("You: ", .{});
+        try stdout.writeAll("You: ");
         output_mutex.unlock();
 
-        const input = stdin.readUntilDelimiterOrEof(&buffer, '\n') catch |err| {
-            output_mutex.lock();
-            std.debug.print("[Sender] Read error: {}\n", .{err});
-            output_mutex.unlock();
-            continue;
-        };
+        if (stdin.readUntilDelimiterOrEof(&buffer, '\n')) |line| {
+            if (line.len == 0) continue;
 
-        if (input) |msg| {
-            if (msg.len == 0) continue;
+            const message_data = try allocator.dupe(u8, line);
+            const message = Message.init(message_data);
 
-            const msg_copy = try allocator.dupe(u8, msg);
-
-            const message = Message{
-                .data = msg_copy,
-                .allocator = allocator,
+            queue.push(message) catch |err| {
+                output_mutex.lock();
+                std.debug.print("[Sender] Queue error: {}\n", .{err});
+                output_mutex.unlock();
+                allocator.free(message_data);
+                continue;
             };
-
-            try queue.push(message);
-        } else {
+        } else |_| {
             break;
         }
     }

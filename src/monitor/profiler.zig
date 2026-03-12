@@ -1,64 +1,48 @@
 const std = @import("std");
 
-// PERFORMANCE PROFILER
-// Tracks message latency and encryption performance
+pub const ProfileResult = struct {
+    name: []const u8,
+    calls: u64 = 0,
+    total_ns: u64 = 0,
+    min_ns: u64 = std.math.maxInt(u64),
+    max_ns: u64 = 0,
+
+    pub fn average(self: ProfileResult) u64 {
+        if (self.calls == 0) return 0;
+        return self.total_ns / self.calls;
+    }
+};
 
 pub const Profiler = struct {
-    message_count: u64,
-    total_encrypt_time: u64,
-    total_decrypt_time: u64,
-    mutex: std.Thread.Mutex,
+    name: []const u8,
+    start_time: i64,
+    result: *ProfileResult,
 
-    pub fn init() Profiler {
+    pub fn init(name: []const u8, result: *ProfileResult) Profiler {
         return Profiler{
-            .message_count = 0,
-            .total_encrypt_time = 0,
-            .total_decrypt_time = 0,
-            .mutex = std.Thread.Mutex{},
+            .name = name,
+            .start_time = std.time.nanoTimestamp(),
+            .result = result,
         };
     }
 
-    pub fn recordEncrypt(self: *Profiler, time_ns: u64) void {
-        self.mutex.lock();
-        defer self.mutex.unlock();
+    pub fn end(self: Profiler) void {
+        const end_time = std.time.nanoTimestamp();
+        const duration: u64 = @intCast(end_time - self.start_time);
 
-        self.total_encrypt_time += time_ns;
-        self.message_count += 1;
-    }
-    pub fn recordDecrypt(self: *Profiler, time_ns: u64) void {
-        self.mutex.lock();
-        defer self.mutex.unlock();
-
-        self.total_decrypt_time += time_ns;
-    }
-    pub fn getAvgEncryptTime(self: *Profiler) u64 {
-        self.mutex.lock();
-        defer self.mutex.unlock();
-
-        if (self.message_count == 0) return 0;
-        return self.total_encrypt_time / self.message_count;
-    }
-    pub fn printStats(self: *Profiler) void {
-        self.mutex.lock();
-        defer self.mutex.unlock();
-
-        std.debug.print("\nPerformance Statistics\n", .{});
-        std.debug.print("Messages processed: {}\n", .{self.message_count});
-
-        if (self.message_count > 0) {
-            const avg_encrypt = self.total_encrypt_time / self.message_count;
-            const avg_decrypt = self.total_decrypt_time / self.message_count;
-            std.debug.print("Avg encryption time: {} ns\n", .{avg_encrypt});
-            std.debug.print("Avg decryption time: {} ns\n", .{avg_decrypt});
-        }
-        std.debug.print("==============================\n\n", .{});
-    }
-    pub fn reset(self: *Profiler) void {
-        self.mutex.lock();
-        defer self.mutex.unlock();
-
-        self.message_count = 0;
-        self.total_encrypt_time = 0;
-        self.total_decrypt_time = 0;
+        self.result.calls += 1;
+        self.result.total_ns += duration;
+        if (duration < self.result.min_ns) self.result.min_ns = duration;
+        if (duration > self.result.max_ns) self.result.max_ns = duration;
     }
 };
+
+pub fn printResult(result: ProfileResult) void {
+    std.debug.print("{s}: {} calls, avg {d} ns, min {d} ns, max {d} ns\n", .{
+        result.name,
+        result.calls,
+        result.average(),
+        result.min_ns,
+        result.max_ns,
+    });
+}

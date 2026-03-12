@@ -1,8 +1,15 @@
 const std = @import("std");
 
 pub const Message = struct {
-    data: []const u8,
-    allocator: std.mem.Allocator,
+    data: []u8,
+    timestamp: i64,
+
+    pub fn init(data: []u8) Message {
+        return Message{
+            .data = data,
+            .timestamp = std.time.milliTimestamp(),
+        };
+    }
 
     pub fn deinit(self: *Message) void {
         self.allocator.free(self.data);
@@ -10,43 +17,51 @@ pub const Message = struct {
 };
 
 pub const MessageQueue = struct {
-    queue: std.ArrayList(Message),
+    items: std.ArrayList(Message),
     mutex: std.Thread.Mutex,
-    not_empty: std.Thread.Condition,
     allocator: std.mem.Allocator,
 
     pub fn init(allocator: std.mem.Allocator) MessageQueue {
-        return .{
-            .queue = std.ArrayList(Message).init(allocator),
-            .mutex = .{},
-            .not_empty = .{},
+        return MessageQueue{
+            .items = std.ArrayList(Message).init(allocator),
+            .mutex = std.Thread.Mutex{},
             .allocator = allocator,
         };
     }
 
-    pub fn push(self: *MessageQueue, msg: Message) !void {
+    pub fn push(self: *MessageQueue, message: Message) !void {
         self.mutex.lock();
         defer self.mutex.unlock();
 
-        try self.queue.append(msg);
-        self.not_empty.signal();
+        try self.items.append(message);
     }
 
     pub fn pop(self: *MessageQueue) ?Message {
         self.mutex.lock();
         defer self.mutex.unlock();
 
-        while (self.queue.items.len == 0) {
-            self.not_empty.wait(&self.mutex);
+        if (self.items.items.len == 0) {
+            return null;
         }
 
-        return self.queue.orderedRemove(0);
+        return self.items.orderedRemove(0);
+    }
+
+    pub fn len(self: *MessageQueue) usize {
+        self.mutex.lock();
+        defer self.mutex.unlock();
+
+        return self.items.items.len;
     }
 
     pub fn deinit(self: *MessageQueue) void {
-        for (self.queue.items) |*msg| {
-            msg.deinit();
+        self.mutex.lock();
+        defer self.mutex.unlock();
+
+        for (self.items.items) |*msg| {
+            self.allocator.free(msg.data);
         }
-        self.queue.deinit();
+
+        self.items.deinit();
     }
 };

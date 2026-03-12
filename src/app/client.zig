@@ -19,12 +19,14 @@ pub fn run(allocator: std.mem.Allocator) !void {
 
     var conn = try allocator.create(Connection);
     conn.* = Connection.init(stream, allocator);
-    try conn.setNonBlocking();
+    defer {
+        conn.close();
+        allocator.destroy(conn);
+    }
 
     std.debug.print("Connected to server!\n", .{});
     std.debug.print("Sending handshake...\n", .{});
 
-    // Simple handshake - just write 32 bytes
     _ = try conn.stream.writeAll(&unique_id);
 
     std.debug.print("Handshake sent. Session established.\n\n", .{});
@@ -37,11 +39,6 @@ pub fn run(allocator: std.mem.Allocator) !void {
     const sender_thread = try std.Thread.spawn(.{}, sender.senderThread, .{ &msg_queue, allocator, &output_mutex });
     const writer_thread = try std.Thread.spawn(.{}, writer.writerThread, .{ conn, &msg_queue, key });
     const receiver_thread = try std.Thread.spawn(.{}, receiver.receiverThread, .{ conn, key, &output_mutex });
-
-    defer {
-        conn.close();
-        allocator.destroy(conn);
-    }
 
     sender_thread.join();
     writer_thread.join();
